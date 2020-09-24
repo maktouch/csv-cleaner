@@ -1,65 +1,142 @@
-import Head from 'next/head'
-import styles from '../styles/Home.module.css'
+import { useState } from "react";
+import Head from "next/head";
+import styles from "../styles/Home.module.css";
+import Papa from "papaparse";
+import { useFormState } from "../components/hooks/useFormState";
+import { DateTime } from "luxon";
+import fixUtf8 from "fix-utf8";
 
 export default function Home() {
+  const [
+    { headers, data, filename, ...types },
+    { checkbox, select, setValue },
+  ] = useFormState({
+    filename: "",
+    headers: [],
+    data: [],
+  });
+
+  const onChange = (e) => {
+    const [file] = e.target.files;
+
+    setValue(`filename`, `cleaned-${file.name}`);
+
+    Papa.parse(file, {
+      complete: function (results) {
+        const [headers, ...data] = results.data;
+        setValue("headers", headers);
+        headers.forEach((val, i) => {
+          setValue(`type-${i}`, "disabled");
+        });
+        setValue("data", data);
+      },
+    });
+  };
+
+  const save = (e) => {
+    const outputHeader = [];
+
+    headers.forEach((header, i) => {
+      const key = `type-${i}`;
+      const type = types[key];
+
+      if (type === "disabled") {
+        return;
+      }
+
+      outputHeader.push(header);
+    });
+
+    const output = [];
+
+    data.forEach((row) => {
+      const thisRow = [];
+      row.forEach((val, i) => {
+        const key = `type-${i}`;
+        const type = types[key];
+
+        if (type === "disabled") {
+          return null;
+        }
+
+        if (type === "string") {
+          thisRow.push(fixUtf8(String(val)));
+          return;
+        }
+
+        if (type === "number") {
+          thisRow.push(Number(val));
+          return;
+        }
+
+        if (type === "M/d/yyyy") {
+          thisRow.push(DateTime.fromFormat(val, "M/d/yyyy").toISODate());
+        }
+      });
+
+      output.push(thisRow);
+    });
+
+    const finalOutput = Papa.unparse([outputHeader, ...output], {
+      quotes: true,
+    });
+
+    const blob = new Blob([finalOutput], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", filename);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className={styles.container}>
       <Head>
-        <title>Create Next App</title>
+        <title>CSV to XLS</title>
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
-      <main className={styles.main}>
-        <h1 className={styles.title}>
-          Welcome to <a href="https://nextjs.org">Next.js!</a>
-        </h1>
+      <input type="file" onChange={onChange} />
 
-        <p className={styles.description}>
-          Get started by editing{' '}
-          <code className={styles.code}>pages/index.js</code>
-        </p>
+      <button onClick={save}>Save</button>
 
-        <div className={styles.grid}>
-          <a href="https://nextjs.org/docs" className={styles.card}>
-            <h3>Documentation &rarr;</h3>
-            <p>Find in-depth information about Next.js features and API.</p>
-          </a>
+      <table style={{ border: "1px" }}>
+        <thead>
+          <tr>
+            {headers.map((head, index) => {
+              return (
+                <th key={index}>
+                  <p>{head}</p>
+                  <select {...select(`type-${index}`)}>
+                    <option>disabled</option>
+                    <option>string</option>
+                    <option value="M/d/yyyy">date (M/d/yyyy)</option>
+                    {/* <option>date (day/month/year)</option>
+                    <option>date (year/month/day)</option> */}
+                    {/* <option>datetime</option> */}
+                    <option>number</option>
+                  </select>
+                </th>
+              );
+            })}
+          </tr>
+        </thead>
 
-          <a href="https://nextjs.org/learn" className={styles.card}>
-            <h3>Learn &rarr;</h3>
-            <p>Learn about Next.js in an interactive course with quizzes!</p>
-          </a>
-
-          <a
-            href="https://github.com/vercel/next.js/tree/master/examples"
-            className={styles.card}
-          >
-            <h3>Examples &rarr;</h3>
-            <p>Discover and deploy boilerplate example Next.js projects.</p>
-          </a>
-
-          <a
-            href="https://vercel.com/import?filter=next.js&utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-            className={styles.card}
-          >
-            <h3>Deploy &rarr;</h3>
-            <p>
-              Instantly deploy your Next.js site to a public URL with Vercel.
-            </p>
-          </a>
-        </div>
-      </main>
-
-      <footer className={styles.footer}>
-        <a
-          href="https://vercel.com?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Powered by{' '}
-          <img src="/vercel.svg" alt="Vercel Logo" className={styles.logo} />
-        </a>
-      </footer>
+        <tbody>
+          {data.map((row, index) => {
+            return (
+              <tr key={index}>
+                {row.map((col, index2) => {
+                  return <td key={`${index}-${index2}`}>{col}</td>;
+                })}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
-  )
+  );
 }
