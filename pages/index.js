@@ -19,7 +19,9 @@ export default function Home() {
   const onChange = (e) => {
     const [file] = e.target.files;
 
-    setValue(`filename`, `cleaned-${file.name}`);
+    const [filename] = file.name.split(".");
+
+    setValue(`filename`, `cleaned-${filename}.xlsx`);
 
     Papa.parse(file, {
       complete: function (results) {
@@ -33,7 +35,7 @@ export default function Home() {
     });
   };
 
-  const save = (e) => {
+  const save = async (e) => {
     const outputHeader = [];
 
     headers.forEach((header, i) => {
@@ -77,11 +79,22 @@ export default function Home() {
       output.push(thisRow);
     });
 
-    const finalOutput = Papa.unparse([outputHeader, ...output], {
-      quotes: true,
+    const response = await fetch(`/api/xlsx`, {
+      method: "POST", // *GET, POST, PUT, DELETE, etc.
+      mode: "cors", // no-cors, *cors, same-origin
+      cache: "no-cache", // *default, no-cache, reload, force-cache, only-if-cached
+      credentials: "same-origin", // include, *same-origin, omit
+      headers: {
+        "Content-Type": "application/json",
+      },
+      redirect: "follow", // manual, *follow, error
+      body: JSON.stringify({
+        data: [outputHeader, ...output],
+        filename,
+      }), // body data type must match "Content-Type" header
     });
 
-    const blob = new Blob([finalOutput], { type: "text/csv;charset=utf-8;" });
+    const blob = await response.blob();
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
